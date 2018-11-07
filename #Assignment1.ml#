@@ -93,8 +93,12 @@ let hexDigit =
 (***********************************************************************************************)
 (* numbers *)
 let digit = range '0' '9';;
+
 let natural = plus digit;;
+
 let hexNatural = plus hexDigit;;
+
+
 
 
 
