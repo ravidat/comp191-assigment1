@@ -24,17 +24,36 @@ let booleanParser = disj falseParser trueParser;;
 (* end boolean function *)
 
 
+
+
 (* char parser *)
 let charPrefixParser =
   let backslashParser = char '\\' in
   let _charPrefixParser =   caten hashtagParser backslashParser in
-  pack _charPrefixParser (fun x  -> '#');;
+  pack _charPrefixParser (fun x  -> '#\');;
 
 let visibleSimpleCharPrefix =
   let simpleCharParser = const (fun ch -> ch > ' ') in
   pack simpleCharParser (fun x -> x);;
 
 
+let namedCharParser = disj_list [returnParser; newLineParser; tabParser; pageParser; nulParser; spaceParser];;
+
+let charParser =
+  let charAsList =  disj_list[caten charPrefixParser namedCharParser ;
+                              caten charPrefixParser visibleSimpleCharPrefix ] in
+  pack charAsList (fun l -> snd l);;
+(* end char parser *)
+
+(* what is this?? *)
+(*
+let xHexChar =
+  let _x_ = char_ci 'x' in
+    pack _x_ (fun x -> Scan.sscanf x "%x%!" fun(x -> x));;
+
+*)
+
+(* named Char parsers *)
 let newLineParser =
   let _newLineParser = word_ci "newline" in
   pack _newLineParser (fun nch -> Char.chr(10));;
@@ -59,19 +78,24 @@ let spaceParser =
   let _spaceParser = word_ci "space" in
   pack _spaceParser (fun nch -> Char.chr(32));;
 
-let namedCharParser = disj_list [returnParser; newLineParser; tabParser; pageParser; nulParser; spaceParser];;
 
-let charParser =
-  let charAsList =  disj_list[caten charPrefixParser namedCharParser ;
-                              caten charPrefixParser visibleSimpleCharPrefix ] in
-  pack charAsList (fun l -> snd l);;
-(* end char parser *)
-let xHexChar =
-  let _x_ = char_ci 'x' in
-    pack _x_ (fun x -> Scan.sscanf x "%x%!" fun(x -> x));;
-
-
-
+(*
 test_string xHexChar "xa";; 
+*)
+let hexParser =  
+  let _zeroPrefix = char '0' in
+  let _xPrefix = char_ci 'x' in
+  let _hexNumbers = range '0' '9' in
+  let _hexSmallLetters = range 'a' 'f' in
+  let _hexCapsLetters = range 'A' 'F' in
+  let _hexDigitsWrapper = disj_list [_hexNumbers; _hexSmallLetters; _hexCapsLetters] in 
 
+  (* TODO add star *)
+  let _hexDigitsWrapperStar = star (_hexDigitsWrapper) in 
+
+  let _wrapper = caten_list [_zeroPrefix; _xPrefix; _hexDigitsWrapper] in
+  pack _wrapper (fun x -> int_of_string (list_to_string x));;
+
+
+test_string hexParser "0xAB";;
 
