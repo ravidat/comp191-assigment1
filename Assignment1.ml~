@@ -147,6 +147,11 @@ let hexIntegerParser =
   let _hexIntegerParser =  caten hexPrefix (disj signedHexNaturalParser hexNatural) in
   pack _hexIntegerParser (fun x -> snd x);;
 
+let floatParser = caten_list [integerParser; char '.'; natural = 
+  let _natural = plus digit in
+  pack _natural (fun n -> (int_of_string (list_to_string n)));;
+
+
 let signs =
   let _plusSign = char '+' in
   let _minusSign = char '-' in
@@ -179,15 +184,10 @@ let hexIntegerParser =
   let _hexIntegerParser =  caten hexPrefix (disj signedHexNaturalParser hexNatural) in
   pack _hexIntegerParser (fun x -> snd x);;
 
-
-(*  handle this, list must contain same objects 
-let floatParser =
-  let _floatParser = caten_list [plus digit; [(char '.')]; plus digit] in
-  pack _floatParser (fun f -> (float_of_string (list_to_string f)));;
-
-test_string floatParser "123.321";; 
-
+(*
+let floatParser = caten_list [integerParser; char '.'; natural];; 
 *)
+
 
 
 
@@ -215,7 +215,7 @@ test_string hexNatural "a";;
 
 test_string hexIntegerParser "#x-b";;
 
-test_string hexIntegerParser "a";;
+test_string hexIntegerParser a";;
 
 
 (* integer fail *)

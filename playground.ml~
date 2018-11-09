@@ -1,8 +1,0 @@
-#use "pc.ml";;
-#use "reader.ml";;
-open PC;;
-
-
-let l = [2 ; 3 ; 0];;
-
-let eval = List.fold_right (fun a b -> a * 10 + b) 0 l;;
