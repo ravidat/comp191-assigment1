@@ -10,13 +10,15 @@ let hashtagParser = char '#';;
 
 let char_to_int = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
 
+let digit = range '0' '9';;
+
 (*
 let valueOfHexList = (fun hexList -> List.fold_left (fun acc cur ->
   acc * 16 + cur) 0  hexList);; 
 *)
 
-let hexCharToDecVal = (fun x -> List.map (fun y -> (hexLetterValue y)) x);; 
 
+(* takes string of hex, return's int with its dec value *)
 let hexToDec = (fun x -> int_of_string ("0x"^x));;
 
 (* end Auxiliary function *)
@@ -80,74 +82,32 @@ let namedCharParser =
 
    disj_list [returnParser; newLineParser; tabParser; pageParser; nulParser; spaceParser];;
 
-let charParser =
-  let charAsList =  disj
-    (caten charPrefixParser namedCharParser)
-    (caten charPrefixParser visibleSimpleCharPrefix) in
-  pack charAsList (fun l -> Char (snd l));;
-(* end char parser *)
-
-(*
-test_string charParser "#\\a"
-*)
-
-(* we need to flatten the list and then use list to string and evaluate easily *)
-
-
-(******************************************** Hex TODO again *************************************************)
-(*
-let hexCharParser =  
-  let _xPrefix = char_ci 'x' in
-  let _hexCalc = (fun str -> value_of_hexList (string_to_list str))
-  pack _hexChar (fun x -> x);;
-
-test_string hexCharParser "x3";;
-
-
-
-let hexParser =  
-  let _zeroPrefix = char '0' in
-  let _xPrefix = char_ci 'x' in
-  let _hexNumbers = range '0' '9' in
-  let _hexSmallLetters = range 'a' 'f' in
-  let _hexCapsLetters = range 'A' 'F' in
-  let _hexDigitsWrapper = disj_list [_hexNumbers; _hexSmallLetters; _hexCapsLetters] in 
-
-  (* TODO add star *)
-  let _hexDigitsWrapperStar = star (_hexDigitsWrapper) in 
-
-  let _wrapper = caten_list [_zeroPrefix; _xPrefix; _hexDigitsWrapper] in
-  pack _wrapper (fun x ->  x);;
-*)
-
-(*
-test_string hexParser "0xB";;
-*)
-
-
-
-
-
-(*
-
-let toDecList = (fun x -> List.map (fun cur -> if cur >= '0' && cur <= '9' then cur else hexLetterValue cur) x);;
-
-toDecList ['F'; 'E'];;
-*)
-
-(************************************************ end of hex ***************************************************)
-
-
-(***********************************************************************************************)
-(*hex parsers *)
-let hexPrefix =
-  let _hexPrefix = caten hashtagParser (char_ci 'x') in
-  pack _hexPrefix (fun x -> snd x);;
-
 let hexDigit =
   let _hexSmallLetters = range 'a' 'f' in
   let _hexCapsLetters = range 'A' 'F' in
   disj_list [digit; _hexSmallLetters; _hexCapsLetters];;
+
+let hexChar = plus hexDigit;;
+
+let hexCharParser =
+  let _hexCharParser = caten (char_ci 'x') hexChar in
+  pack _hexCharParser (fun x -> (char_of_int (int_of_string ("0x"^(list_to_string (snd x))))));;
+
+let charParser =
+  let charAsList =  disj_list
+    [(caten charPrefixParser hexCharParser); 
+    (caten charPrefixParser namedCharParser);
+    (caten charPrefixParser visibleSimpleCharPrefix)] in
+  pack charAsList (fun l -> Char (snd l));;
+
+
+(* end char parser *)
+
+(***********************************************************************************************)
+(*hex integer parsers *)
+let hexPrefix =
+  let _hexPrefix = caten hashtagParser (char_ci 'x') in
+  pack _hexPrefix (fun x -> snd x);;
 
 let hexDigitStar = star hexDigit;;
 
@@ -155,19 +115,8 @@ let hexNatural =
   let _hexNatural = plus hexDigit in
   pack _hexNatural (fun x -> (int_of_string ("0x"^(list_to_string x))));;
 
-test_string hexNatural "a";;
-
-
-let hexCharParser =
-  let _hexChar = plus hexDigit in
-  let _hexParser = caten hexPrefix _hexChar in
-  pack _hexParser (fun x -> Char (char_of_int (int_of_string ("0x"^(list_to_string (snd x))))));;
-
-
-test_string hexCharParser "#x31";;
 
 (* numbers *)
-let digit = range '0' '9';;
 
 let natural = 
   let _natural = plus digit in
@@ -183,4 +132,40 @@ let signedIntegerParser =
 
 let integerParser = disj signedIntegerParser natural;;
 
-test_string integerParser "4";
+
+(* TESTS *)
+
+(* boolean *)
+test_string booleanParser "#t";;
+
+test_string booleanParser "#F";;
+
+(* boolean fail *)
+test_string booleanParser "#t1";; (* not failing. handle it *)
+
+test_string booleanParser "#d";;
+
+
+(* Inegers *)
+test_string integerParser "4";;
+
+test_string integerParser "-4";;
+
+test_string hexNatural "a";;
+
+(* integer fail *)
+test_string hexNatural "g";;
+
+test_string integerParser "a";;
+
+(* chars *)
+test_string hexCharParser "x31";;
+
+test_string charParser "#\\x";;
+
+test_string charParser "#\\x40";;
+
+test_string charParser "#\\page";;
+
+
+
