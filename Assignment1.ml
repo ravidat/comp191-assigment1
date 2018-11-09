@@ -4,7 +4,17 @@ open PC;;
 
 (* Auxiliary methods *)
 (***********************************************************************************)
-let spaces = star (char ' ');;
+let whiteSpaces = star (const (fun ch -> (int_of_char ch) < 33));;
+
+let lineComment =
+  let _semicolon = char ';' in
+  let _comment = star (const (fun ch -> int_of_char (ch) != 59)) in
+  let _newLine =pack (char '\n') (fun ch -> [ch]) in
+  let _line_comment = caten _semicolon _comment in
+  let endOfComment =  disj _newLine  nt_end_of_input in
+  let _full_comment = caten _line_comment endOfComment in
+  pack _full_comment (fun comment -> Nil);;                
+                                
 
 let hashtagParser = char '#';;
 
@@ -105,6 +115,50 @@ let charParser =
 
 
 (* end char parser *)
+
+(*Symbol*)
+let symbolParser =
+  let digit = range '0' '9' in
+  let lowerCase = range 'a' 'z' in
+  let upperCase = range 'A' 'Z' in
+  let _upperCase = pack upperCase (fun x -> Char.lowercase_ascii x) in
+  let punctuation = one_of "!$^*-_=+<>/?:" in 
+  let _symbol_ = plus (disj_list [digit ; lowerCase ; _upperCase ; punctuation]) in
+  pack _symbol_ (fun x -> Symbol (list_to_string  x));;
+
+(*End Symbol*)
+
+
+(*String*)
+let quoute = char '\"';;
+
+let stringLiteralCharParser = const (fun ch -> (int_of_char ch) != 92 && (int_of_char ch) != 34);;
+
+let stringHexCharParser =
+  pack (caten (char '\\') hexCharParser) (fun l -> snd l) ;;
+
+let stringMetaCharParser =
+   disj_list[
+      pack (word "\\r") (fun ch -> char_of_int 13);
+      pack (word "\\n") (fun ch -> char_of_int 10);
+      pack (word "\\\"") (fun ch -> char_of_int 34);
+      pack (word "\\f") (fun ch -> char_of_int 12);
+      pack (word "\\t") (fun ch -> char_of_int 9);
+      pack (word "\\\\") (fun ch -> char_of_int 92)
+     ];;
+
+let stringText = disj_list [stringLiteralCharParser;
+                            stringMetaCharParser;
+                           stringHexCharParser
+                   ];;
+
+let stringParser =
+  let _quoute = quoute in
+  let _stringText = pack (star stringText) (fun (str) -> list_to_string (str))  in
+  pack (caten _quoute (caten _stringText  _quoute)) (fun l -> String (fst(snd(l))));;
+(*End String*)
+
+ 
 
 (***********************************************************************************************)
 
@@ -232,5 +286,18 @@ test_string charParser "#\\x40";;
 
 test_string charParser "#\\page";;
 
+test_string stringParser "\"aa\"";;
 
+test_string stringParser "\"\\n aa\"";;
+
+test_string stringParser "\"\"";;
+
+test_string stringParser "\"\\xa \\x30\"";;
+
+
+test_string spaces "       ";;
+
+                  
+                             
+ 
 
