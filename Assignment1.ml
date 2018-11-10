@@ -4,26 +4,45 @@ open PC;;
 
 (* Auxiliary methods *)
 (***********************************************************************************)
-let spaces = star (char ' ');;
+let sexprParser = disj_list [booleanParser; charParser; symbolParser; stringParser; numberParser];;
+let leftParenParser = char '(';;
+let rightParenParser = char ')';;
+
+
+let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
+
+let whiteSpaces =
+  let _whiteSpaces = star whiteSpace in
+  pack _whiteSpaces (fun x -> list_to_string x);;
+test_string whiteSpaces "    ";;
+
+
+
+let lineComment =
+  let _semicolon = char ';' in
+  let _comment = star (const (fun ch -> int_of_char (ch) != 59)) in
+  let _newLine =pack (char '\n') (fun ch -> [ch]) in
+  let _line_comment = caten _semicolon _comment in
+  let endOfComment =  disj _newLine  nt_end_of_input in
+  let _full_comment = caten _line_comment endOfComment in
+  pack _full_comment (fun comment -> Nil);;               
+                                
 
 let hashtagParser = char '#';;
 
-let char_to_int = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
+let charToInt = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
+
+let reduce = (fun f base list -> List.fold_left (fun acc cur ->
+  f acc cur) base list);;
 
 let digit = range '0' '9';;
 
-(*
-let valueOfHexList = (fun hexList -> List.fold_left (fun acc cur ->
-  acc * 16 + cur) 0  hexList);; 
-*)
 
 
 (* takes string of hex, return's int with its dec value *)
 let hexToDec = (fun x -> int_of_string ("0x"^x));;
 
 (* end Auxiliary function *)
-
-
 
 
 (*boolean *)
@@ -39,12 +58,6 @@ let falseParser =
 
 let booleanParser = disj falseParser trueParser;; 
 (* end boolean function *)
-
-(* Boolean test () *)
-
-(*
-test_string booleanParser "#t";;
-*)
 
 
 (******************************************************************************************************)
@@ -102,32 +115,87 @@ let charParser =
     (caten charPrefixParser namedCharParser);
     (caten charPrefixParser visibleSimpleCharPrefix)] in
   pack charAsList (fun l -> Char (snd l));;
-
-
 (* end char parser *)
+
+(*Symbol*)
+let symbolParser =
+  let digit = range '0' '9' in
+  let lowerCase = range 'a' 'z' in
+  let upperCase = range 'A' 'Z' in
+  let _upperCase = pack upperCase (fun x -> Char.lowercase x) in
+  let punctuation = one_of "!$^*-_=+<>/?:" in 
+  let _symbol_ = plus (disj_list [digit ; lowerCase ; _upperCase ; punctuation]) in
+  pack _symbol_ (fun x -> Symbol (list_to_string  x));;
+
+(*End Symbol*)
+
+
+(*String*)
+let quoute = char '\"';;
+
+let stringLiteralCharParser = const (fun ch -> (int_of_char ch) != 92 && (int_of_char ch) != 34);;
+
+let stringHexCharParser =
+  pack (caten (char '\\') hexCharParser) (fun l -> snd l) ;;
+
+let stringMetaCharParser =
+   disj_list[
+      pack (word "\\r") (fun ch -> char_of_int 13);
+      pack (word "\\n") (fun ch -> char_of_int 10);
+      pack (word "\\\"") (fun ch -> char_of_int 34);
+      pack (word "\\f") (fun ch -> char_of_int 12);
+      pack (word "\\t") (fun ch -> char_of_int 9);
+      pack (word "\\\\") (fun ch -> char_of_int 92)
+     ];;
+
+let stringText = disj_list [stringLiteralCharParser;
+                            stringMetaCharParser;
+                           stringHexCharParser
+                   ];;
+
+let stringParser =
+  let _quoute = quoute in
+  let _stringText = pack (star stringText) (fun (str) -> list_to_string (str))  in
+  pack (caten _quoute (caten _stringText  _quoute)) (fun l -> String (fst(snd(l))));;
+(*End String*)
 
 (***********************************************************************************************)
 
-(* numbers *)
+(* NUMBERS *)
+let numberParser =
+  let _numberParser = disj_list [integerParser; floatParser; hexIntegerParser; hexFloatParser] in
+  pack _numberParser (fun x -> x);; 
 
+(* aux *)
 let natural = 
   let _natural = plus digit in
   pack _natural (fun n -> (int_of_string (list_to_string n)));;
 
-
 let signs =
   let _plusSign = char '+' in
   let _minusSign = char '-' in
   disj _plusSign _minusSign;;
 
+let naturalString =
+  let _natural = plus digit in
+  pack _natural (fun x -> list_to_string x);;
+
+let dotChar =
+  let _dotChar = (char '.') in
+  pack _dotChar (fun x -> Char.escaped x);;
+
+
+(* Integer *)
 let signedIntegerParser =
   let _signedInteger = caten signs natural in
   pack _signedInteger (fun x -> if (fst x) = '-' then (-1 * (snd x)) else snd x);;
 
-let integerParser = disj signedIntegerParser natural;;
+let integerParser =
+  let _integerParser = disj signedIntegerParser natural in
+  pack _integerParser (fun x -> Number (Int x));;
 
 
-(*hex integer parsers *)
+(*Hex Integer *)
 let hexPrefix =
   let _hexPrefix = caten hashtagParser (char_ci 'x') in
   pack _hexPrefix (fun x -> "");;
@@ -138,56 +206,61 @@ let hexNatural =
   let _hexNatural = plus hexDigit in
   pack _hexNatural (fun x -> (int_of_string ("0x"^(list_to_string x))));;
 
-
 let signedHexNaturalParser =
   let _signedHexNaturalParser = caten signs hexNatural in
   pack _signedHexNaturalParser (fun x -> if (fst x) = '-' then (-1 * (snd x)) else snd x);;
 
 let hexIntegerParser =
   let _hexIntegerParser =  caten hexPrefix (disj signedHexNaturalParser hexNatural) in
-  pack _hexIntegerParser (fun x -> snd x);;
+  pack _hexIntegerParser (fun x -> Number (Int (snd x)));;
 
-let signs =
+
+(* Float *)
+let unSignedFloatParser =
+  let _floatParser = caten_list [naturalString; dotChar; naturalString] in
+  pack _floatParser (fun list -> float_of_string (reduce (fun x y -> x^y) "" list));;
+
+let signsToString =
   let _plusSign = char '+' in
   let _minusSign = char '-' in
-  disj _plusSign _minusSign;;
+  let _signsToString = disj _plusSign _minusSign in
+  pack _signsToString (fun ch -> Char.escaped ch);;
 
-let signedIntegerParser =
-  let _signedInteger = caten signs natural in
-  pack _signedInteger (fun x -> if (fst x) = '-' then (-1 * (snd x)) else snd x);;
+let signedFloatParser =
+  let _signedFloatParser = caten_list [signsToString; naturalString; dotChar; naturalString] in
+  pack _signedFloatParser (fun list -> float_of_string (reduce (fun x y -> x^y) "" list));;
 
-let integerParser = disj signedIntegerParser natural;;
-
-
-(*hex integer parsers *)
-let hexPrefix =
-  let _hexPrefix = caten hashtagParser (char_ci 'x') in
-  pack _hexPrefix (fun x -> "");;
-
-let hexDigitStar = star hexDigit;;
-
-let hexNatural =
-  let _hexNatural = plus hexDigit in
-  pack _hexNatural (fun x -> (int_of_string ("0x"^(list_to_string x))));;
-
-
-let signedHexNaturalParser =
-  let _signedHexNaturalParser = caten signs hexNatural in
-  pack _signedHexNaturalParser (fun x -> if (fst x) = '-' then (-1 * (snd x)) else snd x);;
-
-let hexIntegerParser =
-  let _hexIntegerParser =  caten hexPrefix (disj signedHexNaturalParser hexNatural) in
-  pack _hexIntegerParser (fun x -> snd x);;
-
-
-(*  handle this, list must contain same objects 
 let floatParser =
-  let _floatParser = caten_list [plus digit; [(char '.')]; plus digit] in
-  pack _floatParser (fun f -> (float_of_string (list_to_string f)));;
+  let _floatParser = disj signedFloatParser unSignedFloatParser in
+  pack _floatParser (fun f -> Number (Float f));;
 
-test_string floatParser "123.321";; 
 
-*)
+test_string floatParser "-33.331313";;
+
+
+(* Hex Float *)
+let hexDigitStarToString =
+  let _hexDigitStarToString = star hexDigit in
+  pack _hexDigitStarToString (fun list -> list_to_string list);;
+
+let hexNaturalToString =
+  let _hexNatural = plus hexDigit in
+  pack _hexNatural (fun x -> ("0x"^(list_to_string x)));;
+
+
+let unSignedHexFloatParser =
+  let _floatParser = caten_list [hexPrefix; hexNaturalToString; dotChar; hexDigitStarToString] in
+  pack _floatParser (fun list -> float_of_string (reduce (fun x y -> x^y) "" list));;
+
+let signedHexFloatParser =
+  let _signedHexFloatParser = caten_list [hexPrefix; signsToString; hexNaturalToString; dotChar; hexDigitStarToString] in
+  pack _signedHexFloatParser (fun list -> float_of_string (reduce (fun x y -> x^y) "" list));;
+
+
+let hexFloatParser =
+  let _hexFloatParser = disj signedFloatParser unSignedHexFloatParser in
+  pack _hexFloatParser (fun f -> Number (Float f));;
+
 
 
 
@@ -215,6 +288,7 @@ test_string hexNatural "a";;
 
 test_string hexIntegerParser "#x-b";;
 
+(* should fail, no prefix *)
 test_string hexIntegerParser "a";;
 
 
@@ -222,6 +296,14 @@ test_string hexIntegerParser "a";;
 test_string hexNatural "g";;
 
 test_string integerParser "a";;
+
+
+(* Floats *)
+test_string unSignedHexFloatParser "#xe.a123";;
+
+test_string signedHexFloatParser "#x-e.2";;
+
+
 
 (* chars *)
 test_string hexCharParser "x31";;
@@ -232,5 +314,19 @@ test_string charParser "#\\x40";;
 
 test_string charParser "#\\page";;
 
+test_string stringParser "\"aa\"";;
+
+test_string stringParser "\"\\n aa\"";;
+
+test_string stringParser "\"\"";;
+
+test_string stringParser "\"\\xa \\x30\"";;
 
 
+test_string whiteSpaces "       ";;
+
+
+
+
+
+(**********************************************************************************************************************)
