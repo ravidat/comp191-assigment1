@@ -6,6 +6,8 @@
  *)
 
 #use "pc.ml";;
+open PC;;
+
 exception X_not_yet_implemented;;
 exception X_this_should_not_happen;;
   
@@ -47,11 +49,13 @@ let normalize_scheme_symbol str =
 	s) then str
   else Printf.sprintf "|%s|" str;;
 
-let read_sexpr string = raise X_not_yet_implemented ;;
+
+let read_sexpr string =
+  match sexprWithSpacesAndCommentsParser (string_to_list string) with
+  | (sexpr,[]) -> sexpr
+  | _ -> raise X_no_match;; 
+
 
 let read_sexprs string = raise X_not_yet_implemented;;
-
-let a = 4;;
-a;;
 
 end;; (* struct Reader *)
