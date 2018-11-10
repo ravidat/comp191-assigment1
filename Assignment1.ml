@@ -2,11 +2,35 @@
 #use "reader.ml";;
 open PC;;
 
-(* Auxiliary methods *)
-(***********************************************************************************)
-let sexprParser = disj_list [booleanParser; charParser; symbolParser; stringParser; numberParser];;
+let _sexprParser =
+  let _wrapper = disj_list [numberParser; booleanParser; charParser; symbolParser; stringParser] in
+  not_followed_by _wrapper symbolParser;;
+  
+let _sexprParserWithSpace =
+  let _wrapper = caten _sexprParser whiteSpace in
+  pack _wrapper (fun tuple -> fst tuple);;
+
+
+let sexprParser = disj _sexprParserWithSpace _sexprParser;;
+
+
 let leftParenParser = char '(';;
+
 let rightParenParser = char ')';;
+
+(* not good *)
+let listParser =
+  let _sexprs = star sexprParser in
+  caten leftParenParser (caten whiteSpaces (caten _sexprs (caten whiteSpaces (caten rightParenParser))));;
+
+let dottedListParser =
+  let plusSexpr = plus sexprParser in
+  let dotChar = char '.' in
+  caten plusSexpr (caten dotChar sexprParser);;
+
+
+test_string sexprParser "123 ";;
+test_string dottedListParser "123.#xa";;
 
 
 let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
@@ -16,6 +40,9 @@ let whiteSpaces =
   pack _whiteSpaces (fun x -> list_to_string x);;
 test_string whiteSpaces "    ";;
 
+let nilParser =
+  let _nilParser = caten leftParenParser (caten whiteSpaces rightParenParser) in
+  pack _nilParser (fun x -> Nil);;
 
 
 let lineComment =
@@ -27,7 +54,8 @@ let lineComment =
   let _full_comment = caten _line_comment endOfComment in
   pack _full_comment (fun comment -> Nil);;               
                                 
-
+(* Auxiliary methods *)
+(***********************************************************************************)
 let hashtagParser = char '#';;
 
 let charToInt = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
@@ -117,6 +145,7 @@ let charParser =
   pack charAsList (fun l -> Char (snd l));;
 (* end char parser *)
 
+(******************************************************************************************************)
 (*Symbol*)
 let symbolParser =
   let digit = range '0' '9' in
@@ -129,7 +158,7 @@ let symbolParser =
 
 (*End Symbol*)
 
-
+(******************************************************************************************************************)
 (*String*)
 let quoute = char '\"';;
 
@@ -159,11 +188,11 @@ let stringParser =
   pack (caten _quoute (caten _stringText  _quoute)) (fun l -> String (fst(snd(l))));;
 (*End String*)
 
-(***********************************************************************************************)
 
+(***********************************************************************************************)
 (* NUMBERS *)
 let numberParser =
-  let _numberParser = disj_list [integerParser; floatParser; hexIntegerParser; hexFloatParser] in
+  let _numberParser = disj_list [hexFloatParser; floatParser; integerParser; hexIntegerParser] in
   pack _numberParser (fun x -> x);; 
 
 (* aux *)
@@ -235,9 +264,6 @@ let floatParser =
   pack _floatParser (fun f -> Number (Float f));;
 
 
-test_string floatParser "-33.331313";;
-
-
 (* Hex Float *)
 let hexDigitStarToString =
   let _hexDigitStarToString = star hexDigit in
@@ -256,7 +282,6 @@ let signedHexFloatParser =
   let _signedHexFloatParser = caten_list [hexPrefix; signsToString; hexNaturalToString; dotChar; hexDigitStarToString] in
   pack _signedHexFloatParser (fun list -> float_of_string (reduce (fun x y -> x^y) "" list));;
 
-
 let hexFloatParser =
   let _hexFloatParser = disj signedFloatParser unSignedHexFloatParser in
   pack _hexFloatParser (fun f -> Number (Float f));;
@@ -268,64 +293,57 @@ let hexFloatParser =
 
 (* boolean *)
 test_string booleanParser "#t";;
-
 test_string booleanParser "#F";;
-
-(* boolean fail *)
+(* ~~fail~~ *)
 test_string booleanParser "#t1";; (* not failing. handle it *)
-
+test_string sexprParser "#t1";;   (* ^ this is fixed from sexprParser *)
 test_string booleanParser "#d";;
-
 
 (* Inegers *)
 test_string integerParser "4";;
-
 test_string integerParser "+4";;
-
 test_string integerParser "-4";;
-
 test_string hexNatural "a";;
-
 test_string hexIntegerParser "#x-b";;
-
-(* should fail, no prefix *)
+(* ~~should fail, no prefix~~ *)
 test_string hexIntegerParser "a";;
-
-
 (* integer fail *)
 test_string hexNatural "g";;
-
 test_string integerParser "a";;
 
-
 (* Floats *)
+test_string floatParser "123.456";;
+test_string floatParser "-0.456";;
+(* hex Floats *)
 test_string unSignedHexFloatParser "#xe.a123";;
-
 test_string signedHexFloatParser "#x-e.2";;
-
-
 
 (* chars *)
 test_string hexCharParser "x31";;
-
 test_string charParser "#\\x";;
-
 test_string charParser "#\\x40";;
-
 test_string charParser "#\\page";;
 
+(* string *)
 test_string stringParser "\"aa\"";;
-
 test_string stringParser "\"\\n aa\"";;
-
 test_string stringParser "\"\"";;
-
 test_string stringParser "\"\\xa \\x30\"";;
 
 
+(* whiteSpaces *)
+
 test_string whiteSpaces "       ";;
+test_string whiteSpace " ";;
+(* ~~fail~~ *)
+test_string whiteSpace "";;
 
 
+(* Nil tests *)
+test_string nilParser "(   )";;
+test_string nilParser "()";;
+(* ~~fail~~ *)
+test_string nilParser "( a  )";;
 
 
 
