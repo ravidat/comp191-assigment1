@@ -2,6 +2,55 @@
 #use "reader.ml";;
 open PC;;
 
+(* Auxiliary methods *)
+let starWhiteSpaces =
+  let starSpaces = star (const (fun ch -> (int_of_char ch) < 33)) in
+  pack starSpaces (fun spaces -> Nil);;
+
+let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
+
+let plusWhiteSpaces =
+  let starSpaces = plus (const (fun ch -> (int_of_char ch) < 33)) in
+  pack starSpaces (fun spaces -> Nil);;
+
+let whiteSpaces =
+  let _whiteSpaces = star whiteSpace in
+  pack _whiteSpaces (fun x -> list_to_string x);;
+test_string whiteSpaces "    ";;
+
+let leftParenParser =
+  let _leftParenParser = char '(' in
+  pack _leftParenParser (fun ch -> Char.escaped ch);;
+
+let rightParenParser =
+  let _rightParenParser = char ')' in
+  pack _rightParenParser (fun ch -> Char.escaped ch);;
+
+
+let lineComment =
+  let _semicolon = char ';' in
+  let _comment = star (const (fun ch -> int_of_char (ch) != 10)) in
+  let _newLine =pack (char '\n') (fun ch -> [ch]) in
+  let _line_comment = caten _semicolon _comment in
+  let endOfComment =  disj _newLine  nt_end_of_input in
+  let _full_comment = caten _line_comment endOfComment in
+  pack _full_comment (fun comment -> Nil);;                
+                                
+
+let hashtagParser = char '#';;
+
+let char_to_int = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
+
+let digit = range '0' '9';;
+
+let reduce = (fun f base list -> List.fold_left (fun acc cur ->
+  f acc cur) base list);;
+
+let hexToDec = (fun x -> int_of_string ("0x"^x));;
+
+(* end Auxiliary function *)
+
+
 let _sexprParser =
   let _wrapper = disj_list [numberParser; booleanParser; charParser; symbolParser; stringParser] in
   not_followed_by _wrapper symbolParser;;
@@ -14,63 +63,10 @@ let _sexprParserWithSpace =
 let sexprParser = disj _sexprParserWithSpace _sexprParser;;
 
 
-let leftParenParser = char '(';;
-
-let rightParenParser = char ')';;
-
-(* not good *)
-let listParser =
-  let _sexprs = star sexprParser in
-  caten leftParenParser (caten whiteSpaces (caten _sexprs (caten whiteSpaces (caten rightParenParser))));;
-
-let dottedListParser =
-  let plusSexpr = plus sexprParser in
-  let dotChar = char '.' in
-  caten plusSexpr (caten dotChar sexprParser);;
-
-
-test_string sexprParser "123 ";;
-test_string dottedListParser "123.#xa";;
-
-
-let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
-
-let whiteSpaces =
-  let _whiteSpaces = star whiteSpace in
-  pack _whiteSpaces (fun x -> list_to_string x);;
-test_string whiteSpaces "    ";;
-
 let nilParser =
   let _nilParser = caten leftParenParser (caten whiteSpaces rightParenParser) in
   pack _nilParser (fun x -> Nil);;
 
-
-let lineComment =
-  let _semicolon = char ';' in
-  let _comment = star (const (fun ch -> int_of_char (ch) != 59)) in
-  let _newLine =pack (char '\n') (fun ch -> [ch]) in
-  let _line_comment = caten _semicolon _comment in
-  let endOfComment =  disj _newLine  nt_end_of_input in
-  let _full_comment = caten _line_comment endOfComment in
-  pack _full_comment (fun comment -> Nil);;               
-                                
-(* Auxiliary methods *)
-(***********************************************************************************)
-let hashtagParser = char '#';;
-
-let charToInt = (fun ch -> ((int_of_char ch) - (int_of_char '0')));;
-
-let reduce = (fun f base list -> List.fold_left (fun acc cur ->
-  f acc cur) base list);;
-
-let digit = range '0' '9';;
-
-
-
-(* takes string of hex, return's int with its dec value *)
-let hexToDec = (fun x -> int_of_string ("0x"^x));;
-
-(* end Auxiliary function *)
 
 
 (*boolean *)
@@ -88,7 +84,6 @@ let booleanParser = disj falseParser trueParser;;
 (* end boolean function *)
 
 
-(******************************************************************************************************)
 (* char parser *)
 let charPrefixParser =
   let backslashParser = char '\\' in
@@ -145,7 +140,7 @@ let charParser =
   pack charAsList (fun l -> Char (snd l));;
 (* end char parser *)
 
-(******************************************************************************************************)
+
 (*Symbol*)
 let symbolParser =
   let digit = range '0' '9' in
@@ -158,7 +153,7 @@ let symbolParser =
 
 (*End Symbol*)
 
-(******************************************************************************************************************)
+
 (*String*)
 let quoute = char '\"';;
 
@@ -188,14 +183,10 @@ let stringParser =
   pack (caten _quoute (caten _stringText  _quoute)) (fun l -> String (fst(snd(l))));;
 (*End String*)
 
+ 
 
-(***********************************************************************************************)
+
 (* NUMBERS *)
-let numberParser =
-  let _numberParser = disj_list [hexFloatParser; floatParser; integerParser; hexIntegerParser] in
-  pack _numberParser (fun x -> x);; 
-
-(* aux *)
 let natural = 
   let _natural = plus digit in
   pack _natural (fun n -> (int_of_string (list_to_string n)));;
@@ -286,6 +277,56 @@ let hexFloatParser =
   let _hexFloatParser = disj signedFloatParser unSignedHexFloatParser in
   pack _hexFloatParser (fun f -> Number (Float f));;
 
+
+(* numbers *)
+
+let natural = 
+  let _natural = plus digit in
+  pack _natural (fun n -> (int_of_string (list_to_string n)));;
+
+
+let signs =
+  let _plusSign = char '+' in
+  let _minusSign = char '-' in
+  disj _plusSign _minusSign;;
+
+
+let numberParser =
+  let _numberParser = disj_list [hexFloatParser; floatParser; integerParser; hexIntegerParser] in
+  pack _numberParser (fun x -> x);; 
+(*end number*)
+
+
+(*TODO : chnage lineComment to comment for sexpr comment addition *)
+let spacesAndComments =
+  let toSkip = caten plusWhiteSpaces (star lineComment) in
+  pack toSkip (fun skip -> Nil);;
+
+let commentAndSpaces =
+  let _comment = plus lineComment in
+  let toSkip = caten _comment starWhiteSpaces in
+  pack toSkip (fun skip -> Nil);;
+                     
+
+let skipSpacesAndComments =
+  let typeOfSkip = disj spacesAndComments commentAndSpaces in
+  pack typeOfSkip (fun skip -> Nil);;
+
+let skip =
+  let toSkip = star skipSpacesAndComments in
+  pack toSkip (fun skil -> Nil);;
+
+let sexprParser =
+  disj_list [booleanParser;
+             charParser;
+             numberParser;
+             stringParser;
+             symbolParser];;
+
+
+let sexprWithSpacesAndCommentsParser =
+  let commentsAndSpaces = caten skip (caten sexprParser skip) in
+  pack commentsAndSpaces (fun exp -> fst (snd exp));;
 
 
 
