@@ -277,13 +277,6 @@ let hexFloatParser =
   pack _hexFloatParser (fun f -> Number (Float f));;
 
 
-let numberParser =
-  let _numberParser = disj_list [hexFloatParser; floatParser; integerParser; hexIntegerParser] in
-  pack _numberParser (fun x -> x);; 
-
-(*end number*)
-
-
 (************************************************************************************************)
 (* scientific notation *)
 
@@ -410,7 +403,17 @@ let scientificFloatParser = disj scientificFloatUnSignedNumberParser
   (disj scientificFloatPlusNumberParser scientificFloatMinusNumberParser);;
 
 
-let scientificNumberParser = disj scientificFloatParser scientificIntegerParser;;
+let scientificNumberParser =
+  let _scientificNumberParser = disj scientificFloatParser scientificIntegerParser in
+  pack _scientificNumberParser (fun n -> Number (Float n));;
+
+
+let numberParser =
+  let _numberParser = disj_list [scientificNumberParser; hexFloatParser; floatParser; integerParser; hexIntegerParser] in
+  pack _numberParser (fun x -> x);; 
+
+
+
 
 
 (********************************************************************************************************)
@@ -445,6 +448,11 @@ let sexprParser =
 let sexprWithSpacesAndCommentsParser =
   let commentsAndSpaces = caten skip (caten sexprParser skip) in
   pack commentsAndSpaces (fun exp -> fst (snd exp));;
+
+
+
+
+
 
 
 
