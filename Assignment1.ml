@@ -18,14 +18,6 @@ let whiteSpaces =
   pack _whiteSpaces (fun x -> list_to_string x);;
 test_string whiteSpaces "    ";;
 
-let leftParenParser =
-  let _leftParenParser = char '(' in
-  pack _leftParenParser (fun ch -> Char.escaped ch);;
-
-let rightParenParser =
-  let _rightParenParser = char ')' in
-  pack _rightParenParser (fun ch -> Char.escaped ch);;
-
 
 let lineComment =
   let _semicolon = char ';' in
@@ -67,6 +59,13 @@ let nilParser =
   let _nilParser = caten leftParenParser (caten whiteSpaces rightParenParser) in
   pack _nilParser (fun x -> Nil);;
 
+let listParser = caten leftParenParser (caten whiteSpaces
+					  (caten (star sexprParser)
+					     (caten whiteSpaces (rightParenParser)
+					     )));;
+
+(* need to avoid patenthesis and empty spaces in the list  *)  
+test_string listParser "(123 = #t \"Amit\")";;
 
 
 (*boolean *)
@@ -185,7 +184,6 @@ let stringParser =
 
  
 
-
 (* NUMBERS *)
 let natural = 
   let _natural = plus digit in
@@ -213,6 +211,7 @@ let signedIntegerParser =
 let integerParser =
   let _integerParser = disj signedIntegerParser natural in
   pack _integerParser (fun x -> Number (Int x));;
+
 
 
 (*Hex Integer *)
@@ -278,24 +277,143 @@ let hexFloatParser =
   pack _hexFloatParser (fun f -> Number (Float f));;
 
 
-(* numbers *)
-
-let natural = 
-  let _natural = plus digit in
-  pack _natural (fun n -> (int_of_string (list_to_string n)));;
-
-
-let signs =
-  let _plusSign = char '+' in
-  let _minusSign = char '-' in
-  disj _plusSign _minusSign;;
-
-
 let numberParser =
   let _numberParser = disj_list [hexFloatParser; floatParser; integerParser; hexIntegerParser] in
   pack _numberParser (fun x -> x);; 
+
 (*end number*)
 
+
+(************************************************************************************************)
+(* scientific notation *)
+
+let evaluateScientificUnSigned list =
+  let num1 = float_of_string (fst list) in
+  let _e = fst (snd list) in
+  let num2 = float_of_string  (snd (snd list)) in
+  (num1 *. (10. ** num2));;
+
+let scientificUnSigneNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString (caten _eStringPack  naturalString)) in
+  pack _scientificNumberParser (fun x -> evaluateScientificUnSigned x);;
+
+
+let evaluateScientificPlus list =
+  let num1 = float_of_string (fst list) in
+  let _e = fst (snd list) in
+  let _sign = fst (snd (snd list)) in
+  let num2 = float_of_string (snd (snd (snd list))) in
+  (num1 *. (10. ** num2));;
+
+let scientificPlusNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _plusSign = char '+' in
+  let _plusSignPack = pack _plusSign (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString (caten _eStringPack (caten _plusSignPack naturalString))) in
+  pack _scientificNumberParser (fun x -> evaluateScientificPlus x);;
+
+
+let evaluateScientificMinus list =
+  let num1 = float_of_string (fst list) in
+  let _e = fst (snd list) in
+  let _sign = fst (snd (snd list)) in
+  let num2 = float_of_string (snd (snd (snd list))) in
+  (num1 /. (10. ** num2));;
+
+
+let scientificMinusNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _minusSign = char '-' in
+  let _minusSignPack = pack _minusSign (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString (caten _eStringPack (caten _minusSignPack naturalString))) in
+  pack _scientificNumberParser (fun x -> evaluateScientificMinus x);;
+
+let scientificIntegerParser = disj scientificMinusNumberParser
+  (disj scientificUnSigneNumberParser scientificPlusNumberParser);;
+
+
+(* float scientific *)
+
+let evaluateScientificFloatUnSigned list =
+  let num1 = float_of_string (fst list) in
+  let _dot = fst (snd list) in
+  let num1_frac = (fst (snd (snd list))) in
+  let _e = fst (snd (snd (snd list))) in
+  let num2 = float_of_string (snd (snd (snd (snd list)))) in
+  (num1  *. (10. ** num2)) +. (float_of_string ("0."^(num1_frac))  *. (10. ** num2)) ;;
+
+let scientificFloatUnSignedNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _dot = char '.' in
+  let _dotPack = pack _dot (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString
+				   (caten _dotPack
+				      (caten naturalString
+					 (caten _eStringPack naturalString)))) in
+  pack _scientificNumberParser (fun x -> evaluateScientificFloatUnSigned x);;
+
+let evaluateScientificFloatPlus list =
+  let num1 = float_of_string (fst list) in
+  let _dot = fst (snd list) in
+  let num1_frac = (fst (snd (snd list))) in
+  let _e = fst (snd (snd (snd list))) in
+  let _sign = fst (snd (snd (snd (snd list)))) in
+  let num2 = float_of_string (snd (snd (snd (snd (snd list))))) in
+  (num1  *. (10. ** num2)) +. (float_of_string ("0."^(num1_frac))  *. (10. ** num2)) ;;
+
+let scientificFloatPlusNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _plusSign = char '+' in
+  let _plusSignPack = pack _plusSign (fun ch -> Char.escaped ch) in
+  let _dot = char '.' in
+  let _dotPack = pack _dot (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString
+				   (caten _dotPack
+				      (caten naturalString
+					 (caten _eStringPack
+					    (caten _plusSignPack naturalString))))) in
+  pack _scientificNumberParser (fun x -> evaluateScientificFloatPlus x);;
+
+
+let evaluateScientificFloatMinus list =
+  let num1 = float_of_string (fst list) in
+  let _dot = fst (snd list) in
+  let num1_frac = (fst (snd (snd list))) in
+  let _e = fst (snd (snd (snd list))) in
+  let _sign = fst (snd (snd (snd (snd list)))) in
+  let num2 = float_of_string (snd (snd (snd (snd (snd list))))) in
+  (num1  /. (10. ** num2)) +. (float_of_string ("0."^(num1_frac))  /. (10. ** num2)) ;;
+
+let scientificFloatMinusNumberParser =
+  let _eString = char_ci 'e' in
+  let _eStringPack = pack _eString (fun ch -> Char.escaped ch) in
+  let _plusSign = char '-' in
+  let _plusSignPack = pack _plusSign (fun ch -> Char.escaped ch) in
+  let _dot = char '.' in
+  let _dotPack = pack _dot (fun ch -> Char.escaped ch) in
+  let _scientificNumberParser = (caten naturalString
+				   (caten _dotPack
+				      (caten naturalString
+					 (caten _eStringPack
+					    (caten _plusSignPack naturalString))))) in
+  pack _scientificNumberParser (fun x -> evaluateScientificFloatMinus x);;
+
+
+
+let scientificFloatParser = disj scientificFloatUnSignedNumberParser
+  (disj scientificFloatPlusNumberParser scientificFloatMinusNumberParser);;
+
+
+let scientificNumberParser = disj scientificFloatParser scientificIntegerParser;;
+
+
+(********************************************************************************************************)
 
 (*TODO : chnage lineComment to comment for sexpr comment addition *)
 let spacesAndComments =
@@ -330,6 +448,33 @@ let sexprWithSpacesAndCommentsParser =
 
 
 
+
+(* List *)
+let leftParenParser =
+  let _leftParenParser = char '(' in
+  pack _leftParenParser (fun ch -> ch);;
+
+let rightParenParser =
+  let _rightParenParser = char ')' in
+  pack _rightParenParser (fun ch -> ch);;
+
+
+let listParser =
+  let sexprStar = star (caten sexprParser whiteSpaces) in
+  caten leftParenParser (caten sexprStar rightParenParser);; 
+
+
+test_string listParser "(123 32 \"hi\")";;
+
+test_string stringParser "\"hello\"";;
+
+test_string stringParser "\"hi\"";;
+
+
+
+
+
+(****************************************************************************************************************)
 (* TESTS *)
 
 (* boolean *)
