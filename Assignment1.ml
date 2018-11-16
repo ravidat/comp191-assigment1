@@ -11,11 +11,6 @@ let plusWhiteSpaces =
   let starSpaces = plus (const (fun ch -> (int_of_char ch) < 33)) in
   pack starSpaces (fun spaces -> Nil);;
 
-let whiteSpaces =
-  let _whiteSpaces = star whiteSpace in
-  pack _whiteSpaces (fun x -> list_to_string x);;
-test_string whiteSpaces "    ";;
-
 let leftParenParser =
   let _leftParenParser = char '(' in
   pack _leftParenParser (fun ch -> Char.escaped ch);;
@@ -24,13 +19,9 @@ let rightParenParser =
   let _rightParenParser = char ')' in
   pack _rightParenParser (fun ch -> Char.escaped ch);;
 
-let listParser =
-  let sexprs = star sexprParser in
-  caten_list [leftParenParser;	  
-	      sexprs;
-	      rightParenParser];;
-
-let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
+let whiteSpace =
+  let _whiteSpacesParser = const (fun ch -> (int_of_char ch) < 33) in
+  pack _whiteSpacesParser (fun l -> Nil);;
 
 let lineComment =
   let _semicolon = char ';' in
@@ -286,34 +277,46 @@ let numberParser =
 (*end number*)
 
 
-(*TODO : chnage lineComment to comment for sexpr comment addition *)
-let spacesAndComments =
-  let toSkip = caten plusWhiteSpaces (star lineComment) in
-  pack toSkip (fun skip -> Nil);;
+(*Maybe need to add sexprComment
+Issue with return Nil with no input*)
 
-let commentAndSpaces =
-  let _comment = plus lineComment in
-  let toSkip = caten _comment starWhiteSpaces in
-  pack toSkip (fun skip -> Nil);;
-                     
 
-let skipSpacesAndComments =
-  let typeOfSkip = disj spacesAndComments commentAndSpaces in
-  pack typeOfSkip (fun skip -> Nil);;
 
-let skip =
-  let toSkip = star skipSpacesAndComments in
-  pack toSkip (fun skil -> Nil);;
-
-let sexprParser =
+let rec _sexprParser_ string =
+  let sexprParsers =
   disj_list [booleanParser;
              charParser;
              numberParser;
              stringParser;
-             symbolParser];;
+             symbolParser;
+             listParser] in
+  let commentsAndSpaces = caten skip (caten sexprParsers skip) in
+  pack commentsAndSpaces (fun exp -> fst (snd exp))
+    string
+and sexprComment str =
+  let _comment_ = word ";#" in
+  let _sexprCommentParser = caten _comment_ _sexprParser_ in
+  pack _sexprCommentParser (fun l -> Nil)
+    str
+and skip str =
+  let spacesAndComments = star(disj_list[whiteSpace ; sexprComment; lineComment]) in
+  pack  spacesAndComments (fun l -> Nil)
+    str
+and listParser str =
+  let leftParen = word "(" in
+  let sexprsInList = caten skip(caten (star _sexprParser_) skip) in
+  let rightParen = word ")" in
+  let _list = caten(leftParen caten(sexprsInList rightParen)) in
+  pack _list (function (left,((l, (lst, r)), right)) -> match lst with
+                                                       |[] -> Nil
+                                                       |_ ->(List.fold_right (fun a b -> Pair(a,b)) lst Nil))
+  str;;
+  
 
 
-let sexprWithSpacesAndCommentsParser =
-  let commentsAndSpaces = caten skip (caten sexprParser skip) in
-  pack commentsAndSpaces (fun exp -> fst (snd exp));;
+
+let a = string_to_list "(1)";;
+
+_sexprParser_ a;;
+                              
 
