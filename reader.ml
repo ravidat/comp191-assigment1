@@ -50,11 +50,14 @@ let normalize_scheme_symbol str =
 
 
 let read_sexpr string =
-  match sexprWithSpacesAndCommentsParser (string_to_list string) with
+  match _sexprParser_ (string_to_list string) with
   | (sexpr,[]) -> sexpr
   | _ -> raise X_no_match;; 
 
 
-let read_sexprs string = raise X_not_yet_implemented;;
+let read_sexprs string =
+  let sexpr,l = star _sexprParser_ (string_to_list string) in
+  sexpr;;
+
 
 end;; (* struct Reader *)
