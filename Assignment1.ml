@@ -7,17 +7,31 @@ let starWhiteSpaces =
   let starSpaces = star (const (fun ch -> (int_of_char ch) < 33)) in
   pack starSpaces (fun spaces -> Nil);;
 
-let whiteSpace = (const (fun ch -> (int_of_char ch) < 33));;
-
 let plusWhiteSpaces =
   let starSpaces = plus (const (fun ch -> (int_of_char ch) < 33)) in
   pack starSpaces (fun spaces -> Nil);;
 
-let whiteSpaces =
-  let _whiteSpaces = star whiteSpace in
-  pack _whiteSpaces (fun x -> list_to_string x);;
-test_string whiteSpaces "    ";;
+let leftParenParser =
+  let _leftParenParser = char '(' in
+  pack _leftParenParser (fun ch -> Char.escaped ch);;
 
+let rightParenParser =
+  let _rightParenParser = char ')' in
+  pack _rightParenParser (fun ch -> Char.escaped ch);;
+
+let whiteSpace =
+  let _whiteSpacesParser = const (fun ch -> (int_of_char ch) < 33) in
+  pack _whiteSpacesParser (fun l -> Nil);;
+
+let leftParen = word "(";;
+
+let rightParen = word ")";;
+
+let squareLeftParen = word "[";;
+
+let squareRightParen = word "]";;
+
+let dot = word "." ;;
 
 let lineComment =
   let _semicolon = char ';' in
@@ -43,29 +57,6 @@ let hexToDec = (fun x -> int_of_string ("0x"^x));;
 (* end Auxiliary function *)
 
 
-let _sexprParser =
-  let _wrapper = disj_list [numberParser; booleanParser; charParser; symbolParser; stringParser] in
-  not_followed_by _wrapper symbolParser;;
-  
-let _sexprParserWithSpace =
-  let _wrapper = caten _sexprParser whiteSpace in
-  pack _wrapper (fun tuple -> fst tuple);;
-
-
-let sexprParser = disj _sexprParserWithSpace _sexprParser;;
-
-
-let nilParser =
-  let _nilParser = caten leftParenParser (caten whiteSpaces rightParenParser) in
-  pack _nilParser (fun x -> Nil);;
-
-let listParser = caten leftParenParser (caten whiteSpaces
-					  (caten (star sexprParser)
-					     (caten whiteSpaces (rightParenParser)
-					     )));;
-
-(* need to avoid patenthesis and empty spaces in the list  *)  
-test_string listParser "(123 = #t \"Amit\")";;
 
 
 (*boolean *)
@@ -184,6 +175,7 @@ let stringParser =
 
  
 
+
 (* NUMBERS *)
 let natural = 
   let _natural = plus digit in
@@ -211,7 +203,6 @@ let signedIntegerParser =
 let integerParser =
   let _integerParser = disj signedIntegerParser natural in
   pack _integerParser (fun x -> Number (Int x));;
-
 
 
 (*Hex Integer *)
@@ -275,6 +266,20 @@ let signedHexFloatParser =
 let hexFloatParser =
   let _hexFloatParser = disj signedFloatParser unSignedHexFloatParser in
   pack _hexFloatParser (fun f -> Number (Float f));;
+
+
+(* numbers *)
+
+let natural = 
+  let _natural = plus digit in
+  pack _natural (fun n -> (int_of_string (list_to_string n)));;
+
+
+let signs =
+  let _plusSign = char '+' in
+  let _minusSign = char '-' in
+  disj _plusSign _minusSign;;
+
 
 
 (************************************************************************************************)
@@ -413,132 +418,141 @@ let numberParser =
   pack _numberParser (fun x -> x);; 
 
 
+(*end number*)
 
 
+(*Maybe need to add sexprComment
+Issue with return Nil with no input*)
 
-(********************************************************************************************************)
 
-(*TODO : chnage lineComment to comment for sexpr comment addition *)
-let spacesAndComments =
-  let toSkip = caten plusWhiteSpaces (star lineComment) in
-  pack toSkip (fun skip -> Nil);;
+(*Maybe need to add sexprComment
+Issue with return Nil with no input*)
 
-let commentAndSpaces =
-  let _comment = plus lineComment in
-  let toSkip = caten _comment starWhiteSpaces in
-  pack toSkip (fun skip -> Nil);;
-                     
-
-let skipSpacesAndComments =
-  let typeOfSkip = disj spacesAndComments commentAndSpaces in
-  pack typeOfSkip (fun skip -> Nil);;
-
-let skip =
-  let toSkip = star skipSpacesAndComments in
-  pack toSkip (fun skil -> Nil);;
-
-let sexprParser =
-  disj_list [booleanParser;
+let rec _sexprParser_ string =
+  pack(caten skip (caten (disj_list [booleanParser;
              charParser;
              numberParser;
              stringParser;
-             symbolParser];;
+             symbolParser;
+             roundListParser;
+             squareListParser;
+             roundDottedListParser;
+             squareDottedListParser;
+             sexprComment;
+             roundVectorParser;
+             squareVectorParser;
+             quotedParser;
+             qQuotedParser;
+             unQuotedSplicedParser;
+             unQuotedParser]) skip))
+(fun(exp) -> fst(snd (exp)))
+string
+and sexprComment str =
+  let _comment_ = word ";#" in
+  let _sexprCommentParser = caten _comment_ _sexprParser_ in
+  pack _sexprCommentParser (fun l -> Nil)
+    str
+and skip str =
+  let spacesAndComments = star(disj_list[whiteSpace ; sexprComment; lineComment]) in
+  pack  spacesAndComments (fun l -> Nil)
+    str
+and roundListParser str =
+  let sexprsInList = caten skip (caten (star _sexprParser_) skip) in
+  let _list_ = caten leftParen (caten sexprsInList rightParen) in
+  pack _list_ (function (l,((a, (x,y)),r))  -> match x with
+             | [] -> Nil
+             | _->(List.fold_right (fun a b -> Pair(a,b)) x Nil))
+    str
+and squareListParser str =
+  let sexprsInList = caten skip (caten (star _sexprParser_) skip) in
+  let _list_ = caten squareLeftParen (caten sexprsInList squareRightParen) in
+  pack _list_ (function (l,((a, (x,y)),r))  -> match x with
+             | [] -> Nil
+             | _->(List.fold_right (fun a b -> Pair(a,b)) x Nil))
+    str  
+and roundDottedListParser str =
+  let leftSexprs = plus _sexprParser_ in
+  let _dottedList_ = caten leftParen (caten leftSexprs (caten dot (caten _sexprParser_ rightParen))) in
+  pack _dottedList_((function (a,(b,(c,(d,e)))) -> match b with
+             | _ -> (List.fold_right (fun a b -> Pair (a, b)) b d)))
+    str
+and squareDottedListParser str =
+  let leftSexprs = plus _sexprParser_ in
+  let _dottedList_ = caten squareLeftParen (caten leftSexprs (caten dot (caten _sexprParser_ squareRightParen))) in
+  pack _dottedList_((function (a,(b,(c,(d,e)))) -> match b with
+             | _ -> (List.fold_right (fun a b -> Pair (a, b)) b d)))
+    str
+and roundVectorParser str =
+  let sexprs = star _sexprParser_ in
+  let _vector = caten hashtagParser (caten leftParen (caten sexprs rightParen)) in
+  pack _vector (fun (a,(b,(c,d))) -> match c with
+                                       |_ -> Vector(c))
+    str
+and squareVectorParser str =
+  let sexprs = star _sexprParser_ in
+  let _vector = caten hashtagParser (caten squareLeftParen (caten sexprs squareRightParen)) in
+  pack _vector (fun (a,(b,(c,d))) -> match c with
+                                       |_ -> Vector(c))
+    str
+and quotedParser str = 
+  let quote = word "'" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("quote") , Pair(exp,Nil)))
+    str
+and qQuotedParser str = 
+  let quote = word "`" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("quasiquote") , Pair(exp,Nil)))
+    str
+and unQuotedSplicedParser str =
+  let quote = word ",@" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("unquote-splicing") , Pair(exp,Nil)))
+    str
+and unQuotedParser str =
+  let quote = word "," in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("unquote") , Pair(exp,Nil)))
+    str;; 
+  
+  
 
 
-let sexprWithSpacesAndCommentsParser =
-  let commentsAndSpaces = caten skip (caten sexprParser skip) in
-  pack commentsAndSpaces (fun exp -> fst (snd exp));;
+let a = string_to_list "[,4 `31.31]";;
+
+_sexprParser_ a;;
+sexprParser                              
 
 
-
-
-
-
-
+(*******************************************************)
 
 
 (* List *)
-let leftParenParser =
-  let _leftParenParser = char '(' in
-  pack _leftParenParser (fun ch -> ch);;
 
-let rightParenParser =
-  let _rightParenParser = char ')' in
-  pack _rightParenParser (fun ch -> ch);;
+let whiteSpaces = star whiteSpace;;
 
-
-let listParser =
-  let sexprStar = star (caten sexprParser whiteSpaces) in
-  caten leftParenParser (caten sexprStar rightParenParser);; 
+let _sexprParser =
+  let _wrapper = disj_list [numberParser; booleanParser; charParser; symbolParser; stringParser] in
+  not_followed_by _wrapper symbolParser;;
+  
+let _sexprParserWithSpace =
+  let _wrapper = caten _sexprParser whiteSpace in
+  pack _wrapper (fun tuple -> fst tuple);;
 
 
-test_string listParser "(123 32 \"hi\")";;
-
-test_string stringParser "\"hello\"";;
-
-test_string stringParser "\"hi\"";;
+let sexprParser = disj _sexprParserWithSpace _sexprParser;;
 
 
+test_string sexprParser "#t1";;
+
+let nilParser =
+  let _nilParser = caten leftParenParser (caten whiteSpaces rightParenParser) in
+  pack _nilParser (fun x -> Nil);;
 
 
+(****************************************************************************)
 
-(****************************************************************************************************************)
-(* TESTS *)
+let read_sexpr string = sexprParser (string_to_list string) ;;
 
-(* boolean *)
-test_string booleanParser "#t";;
-test_string booleanParser "#F";;
-(* ~~fail~~ *)
-test_string booleanParser "#t1";; (* not failing. handle it *)
-test_string sexprParser "#t1";;   (* ^ this is fixed from sexprParser *)
-test_string booleanParser "#d";;
-
-(* Inegers *)
-test_string integerParser "4";;
-test_string integerParser "+4";;
-test_string integerParser "-4";;
-test_string hexNatural "a";;
-test_string hexIntegerParser "#x-b";;
-(* ~~should fail, no prefix~~ *)
-test_string hexIntegerParser "a";;
-(* integer fail *)
-test_string hexNatural "g";;
-test_string integerParser "a";;
-
-(* Floats *)
-test_string floatParser "123.456";;
-test_string floatParser "-0.456";;
-(* hex Floats *)
-test_string unSignedHexFloatParser "#xe.a123";;
-test_string signedHexFloatParser "#x-e.2";;
-
-(* chars *)
-test_string hexCharParser "x31";;
-test_string charParser "#\\x";;
-test_string charParser "#\\x40";;
-test_string charParser "#\\page";;
-
-(* string *)
-test_string stringParser "\"aa\"";;
-test_string stringParser "\"\\n aa\"";;
-test_string stringParser "\"\"";;
-test_string stringParser "\"\\xa \\x30\"";;
-
-
-(* whiteSpaces *)
-
-test_string whiteSpaces "       ";;
-test_string whiteSpace " ";;
-(* ~~fail~~ *)
-test_string whiteSpace "";;
-
-
-(* Nil tests *)
-test_string nilParser "(   )";;
-test_string nilParser "()";;
-(* ~~fail~~ *)
-test_string nilParser "( a  )";;
-
-
-
-(**********************************************************************************************************************)
+let read_sexprs string =
+  raise X_not_yet_implemented;;
