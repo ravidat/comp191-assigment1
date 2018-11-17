@@ -19,6 +19,17 @@ let rightParenParser =
   let _rightParenParser = char ')' in
   pack _rightParenParser (fun ch -> Char.escaped ch);;
 
+let leftParen = word "(";;
+
+let rightParen = word ")";;
+
+let squareLeftParen = word "[";;
+
+let squareRightParen = word "]";;
+
+let dot = word "." ;;
+
+
 let whiteSpace =
   let _whiteSpacesParser = const (fun ch -> (int_of_char ch) < 33) in
   pack _whiteSpacesParser (fun l -> Nil);;
@@ -280,19 +291,25 @@ let numberParser =
 (*Maybe need to add sexprComment
 Issue with return Nil with no input*)
 
-
-
 let rec _sexprParser_ string =
-  let sexprParsers =
-  disj_list [booleanParser;
+  pack(caten skip (caten (disj_list [booleanParser;
              charParser;
              numberParser;
              stringParser;
              symbolParser;
-             listParser] in
-  let commentsAndSpaces = caten skip (caten sexprParsers skip) in
-  pack commentsAndSpaces (fun exp -> fst (snd exp))
-    string
+             roundListParser;
+             squareListParser;
+             roundDottedListParser;
+             squareDottedListParser;
+             sexprComment;
+             roundVectorParser;
+             squareVectorParser;
+             quotedParser;
+             qQuotedParser;
+             unQuotedSplicedParser;
+             unQuotedParser]) skip))
+(fun(exp) -> fst(snd (exp)))
+string
 and sexprComment str =
   let _comment_ = word ";#" in
   let _sexprCommentParser = caten _comment_ _sexprParser_ in
@@ -302,20 +319,69 @@ and skip str =
   let spacesAndComments = star(disj_list[whiteSpace ; sexprComment; lineComment]) in
   pack  spacesAndComments (fun l -> Nil)
     str
-and listParser str =
-  let leftParen = word "(" in
-  let sexprsInList = caten skip(caten (star _sexprParser_) skip) in
-  let rightParen = word ")" in
-  let _list = caten(leftParen caten(sexprsInList rightParen)) in
-  pack _list (function (left,((l, (lst, r)), right)) -> match lst with
-                                                       |[] -> Nil
-                                                       |_ ->(List.fold_right (fun a b -> Pair(a,b)) lst Nil))
-  str;;
+and roundListParser str =
+  let sexprsInList = caten skip (caten (star _sexprParser_) skip) in
+  let _list_ = caten leftParen (caten sexprsInList rightParen) in
+  pack _list_ (function (l,((a, (x,y)),r))  -> match x with
+             | [] -> Nil
+             | _->(List.fold_right (fun a b -> Pair(a,b)) x Nil))
+    str
+and squareListParser str =
+  let sexprsInList = caten skip (caten (star _sexprParser_) skip) in
+  let _list_ = caten squareLeftParen (caten sexprsInList squareRightParen) in
+  pack _list_ (function (l,((a, (x,y)),r))  -> match x with
+             | [] -> Nil
+             | _->(List.fold_right (fun a b -> Pair(a,b)) x Nil))
+    str  
+and roundDottedListParser str =
+  let leftSexprs = plus _sexprParser_ in
+  let _dottedList_ = caten leftParen (caten leftSexprs (caten dot (caten _sexprParser_ rightParen))) in
+  pack _dottedList_((function (a,(b,(c,(d,e)))) -> match b with
+             | _ -> (List.fold_right (fun a b -> Pair (a, b)) b d)))
+    str
+and squareDottedListParser str =
+  let leftSexprs = plus _sexprParser_ in
+  let _dottedList_ = caten squareLeftParen (caten leftSexprs (caten dot (caten _sexprParser_ squareRightParen))) in
+  pack _dottedList_((function (a,(b,(c,(d,e)))) -> match b with
+             | _ -> (List.fold_right (fun a b -> Pair (a, b)) b d)))
+    str
+and roundVectorParser str =
+  let sexprs = star _sexprParser_ in
+  let _vector = caten hashtagParser (caten leftParen (caten sexprs rightParen)) in
+  pack _vector (fun (a,(b,(c,d))) -> match c with
+                                       |_ -> Vector(c))
+    str
+and squareVectorParser str =
+  let sexprs = star _sexprParser_ in
+  let _vector = caten hashtagParser (caten squareLeftParen (caten sexprs squareRightParen)) in
+  pack _vector (fun (a,(b,(c,d))) -> match c with
+                                       |_ -> Vector(c))
+    str
+and quotedParser str = 
+  let quote = word "'" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("quote") , Pair(exp,Nil)))
+    str
+and qQuotedParser str = 
+  let quote = word "`" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("quasiquote") , Pair(exp,Nil)))
+    str
+and unQuotedSplicedParser str =
+  let quote = word ",@" in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("unquote-splicing") , Pair(exp,Nil)))
+    str
+and unQuotedParser str =
+  let quote = word "," in
+  let _qouted_ = caten quote _sexprParser_ in
+  pack _qouted_ (fun (q,exp) -> Pair(Symbol("unquote") , Pair(exp,Nil)))
+    str;; 
+  
   
 
 
-
-let a = string_to_list "(1)";;
+let a = string_to_list "[,4 `31.31]";;
 
 _sexprParser_ a;;
                               
